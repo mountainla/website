@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>晶胞模型演示工作台</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #ffffff; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #1e293b;
+  }
+  canvas { display: block; }
+
+  #panel {
+    position: fixed; top: 16px; left: 16px; width: 290px; padding: 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+    font-size: 13px; user-select: none;
+    transition: transform .4s cubic-bezier(.4, 0, .2, 1),
+                opacity .3s ease;
+    z-index: 50;
+  }
+  body.panel-collapsed #panel {
+    transform: translateX(calc(-100% - 24px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #toggleBtn {
+    position: fixed;
+    top: 18px;
+    left: 322px;
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: #2563eb;
+    padding: 0;
+    transition: left .4s cubic-bezier(.4, 0, .2, 1),
+                background .18s ease,
+                box-shadow .18s ease;
+    z-index: 60;
+  }
+  #toggleBtn:hover {
+    background: #eff6ff;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.18);
+  }
+  #toggleBtn:active { transform: scale(0.94); }
+  #toggleBtn svg {
+    transition: transform .4s cubic-bezier(.4, 0, .2, 1);
+    display: block;
+  }
+  body.panel-collapsed #toggleBtn { left: 16px; }
+  body.panel-collapsed #toggleBtn svg { transform: rotate(180deg); }
+
+  #panel h1 { margin: 0 0 14px; font-size: 15px; font-weight: 600; letter-spacing: .5px; color: #0f172a; }
+  #panel h1 span { color: #2563eb; }
+
+  .field { margin-bottom: 12px; }
+  .field > label.title { display: block; margin-bottom: 6px; font-size: 12px; color: #64748b; letter-spacing: .3px; }
+  select {
+    width: 100%; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: #ffffff; color: #1e293b;
+    font-size: 13px; outline: none; cursor: pointer;
+  }
+  select:focus { border-color: #2563eb; }
+
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row input[type="range"] {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px; outline: none;
+    background: rgba(15, 23, 42, 0.1); cursor: pointer;
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #2563eb; cursor: pointer;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.5);
+  }
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border: none; border-radius: 50%;
+    background: #2563eb; cursor: pointer;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.5);
+  }
+  .slider-row .val {
+    font-size: 12px; color: #2563eb; font-weight: 600;
+    width: 34px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+
+  .switch { display: flex; align-items: center; gap: 8px; padding: 7px 2px; cursor: pointer; color: #334155; }
+  .switch input {
+    appearance: none; -webkit-appearance: none;
+    width: 34px; height: 19px; border-radius: 10px;
+    background: rgba(15, 23, 42, 0.14); position: relative;
+    cursor: pointer; transition: background .2s; flex: none; margin: 0;
+  }
+  .switch input::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: #94a3b8; transition: transform .2s, background .2s;
+  }
+  .switch input:checked { background: rgba(37, 99, 235, 0.35); }
+  .switch input:checked::after { transform: translateX(15px); background: #2563eb; }
+
+  button {
+    width: 100%; margin-top: 6px; padding: 9px; border-radius: 8px;
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    background: rgba(37, 99, 235, 0.08); color: #2563eb;
+    font-size: 13px; cursor: pointer; transition: background .15s;
+    font-family: inherit;
+  }
+  button:hover { background: rgba(37, 99, 235, 0.16); }
+  button.primary {
+    border-color: rgba(37, 99, 235, 0.55);
+    background: rgba(37, 99, 235, 0.16);
+    font-weight: 600;
+  }
+  button.primary:hover { background: rgba(37, 99, 235, 0.26); }
+
+  /* 危险动作按钮（红色） */
+  button.danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.08);
+    color: #dc2626;
+    margin-top: 8px;
+  }
+  button.danger:hover { background: rgba(239, 68, 68, 0.18); }
+
+  #info {
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    font-size: 12px; line-height: 1.85; color: #64748b; min-height: 54px;
+  }
+  #info b { color: #0f172a; font-weight: 600; }
+  #info .coord-num {
+    display: inline-block;
+    font-size: 20px; font-weight: 700; color: #2563eb;
+    line-height: 1; margin: 0 4px;
+  }
+  #info .tag {
+    display: inline-block;
+    font-size: 11px; padding: 1px 7px; border-radius: 4px;
+    background: rgba(37, 99, 235, 0.12); color: #2563eb;
+    margin-left: 4px; font-weight: 600;
+  }
+  #info .tag-ext {
+    background: rgba(148, 163, 184, 0.18); color: #64748b;
+  }
+
+  #hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(15, 23, 42, 0.4);
+    letter-spacing: .5px; pointer-events: none; white-space: nowrap;
+  }
+  @media (max-width: 560px) {
+    #panel {
+      width: calc(100% - 24px); left: 12px; top: 12px; padding: 13px;
+    }
+    #toggleBtn {
+      left: auto; right: 12px; top: 12px;
+    }
+    body.panel-collapsed #toggleBtn {
+      left: auto; right: 12px;
+    }
+    body.panel-collapsed #panel {
+      transform: translateX(calc(-100% - 20px));
+    }
+    #hint { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>晶胞模型 <span>工作台</span></h1>
+
+  <div class="field">
+    <label class="title">晶体结构</label>
+    <select id="crystal"></select>
+  </div>
+
+  <div class="field">
+    <label class="title">原子缩放（真实半径的倍数）</label>
+    <div class="slider-row">
+      <input type="range" id="atomScale" min="0.20" max="1.00" step="0.05" value="0.45" />
+      <span class="val" id="atomScaleVal">0.45</span>
+    </div>
+  </div>
+
+  <label class="switch"><input type="checkbox" id="showBonds" checked> 显示化学键</label>
+  <label class="switch"><input type="checkbox" id="showCell" checked> 显示晶胞边框</label>
+  <label class="switch"><input type="checkbox" id="autoRotate"> 自动旋转</label>
+
+  <button id="reset">重置视角</button>
+  <button id="clearExt">清除所有扩展晶胞</button>
+
+  <div id="info">点击任意原子查看信息</div>
+</div>
+
+<button id="toggleBtn" title="折叠面板" aria-label="折叠面板">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2.6"
+       stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"></polyline>
+  </svg>
+</button>
+
+<div id="hint">拖拽旋转 · 滚轮缩放 · 右键平移 · 点击原子 → 箭头扩展</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ==================== 面板折叠 ==================== */
+const toggleBtn = document.getElementById('toggleBtn');
+const COLLAPSE_KEY = 'crystal-panel-collapsed';
+
+function applyPanelState(collapsed) {
+  document.body.classList.toggle('panel-collapsed', collapsed);
+  toggleBtn.title = collapsed ? '展开面板' : '折叠面板';
+  toggleBtn.setAttribute('aria-label', toggleBtn.title);
+}
+
+let panelCollapsed = false;
+try {
+  panelCollapsed = localStorage.getItem(COLLAPSE_KEY) === '1';
+} catch (e) { /* 忽略隐私模式 */ }
+applyPanelState(panelCollapsed);
+
+toggleBtn.addEventListener('click', () => {
+  panelCollapsed = !panelCollapsed;
+  applyPanelState(panelCollapsed);
+  try {
+    localStorage.setItem(COLLAPSE_KEY, panelCollapsed ? '1' : '0');
+  } catch (e) { /* 忽略 */ }
+});
+
+/* ==================== 全局视觉参数 ==================== */
+let ATOM_SCALE = 0.45;
+
+/* 扩展原子（半透明）的不透明度 */
+const EXT_ATOM_OPACITY = 0.58;
+
+/* ==================== 漫画风元素配色 ==================== */
+const ELEMENTS = {
+  Na: { color: 0xa855f7, radius: 1.02, label: '钠 Na⁺' },
+  Cl: { color: 0x22c55e, radius: 1.81, label: '氯 Cl⁻' },
+  Cs: { color: 0xec4899, radius: 1.67, label: '铯 Cs⁺' },
+  C:  { color: 0x334155, radius: 0.77, label: '碳 C'  },
+  Cu: { color: 0xf97316, radius: 1.28, label: '铜 Cu' },
+  Fe: { color: 0xef4444, radius: 1.26, label: '铁 Fe' },
+  Po: { color: 0x8b5cf6, radius: 1.68, label: '钋 Po' },
+};
+
+/* ==================== 位置生成辅助 ==================== */
+const corners = el => {
+  const out = [];
+  for (let x = 0; x <= 1; x++)
+    for (let y = 0; y <= 1; y++)
+      for (let z = 0; z <= 1; z++) out.push([x, y, z, el]);
+  return out;
+};
+const faceCenters = el =>
+  [[.5,.5,0],[.5,.5,1],[.5,0,.5],[.5,1,.5],[0,.5,.5],[1,.5,.5]].map(p => [...p, el]);
+const edgeCenters = el =>
+  [[.5,0,0],[.5,1,0],[.5,0,1],[.5,1,1],
+   [0,.5,0],[1,.5,0],[0,.5,1],[1,.5,1],
+   [0,0,.5],[1,0,.5],[0,1,.5],[1,1,.5]].map(p => [...p, el]);
+
+/* ==================== 晶体库 ==================== */
+const CRYSTALS = {
+  nacl: {
+    label: 'NaCl · 氯化钠（岩盐型）',
+    a: 5.64, bond: 0.50,
+    atoms: [...corners('Cl'), ...faceCenters('Cl'), ...edgeCenters('Na'), [.5,.5,.5,'Na']],
+  },
+  cscl: {
+    label: 'CsCl · 氯化铯',
+    a: 4.11, bond: Math.sqrt(3) / 2,
+    atoms: [...corners('Cl'), [.5,.5,.5,'Cs']],
+  },
+  diamond: {
+    label: 'C · 金刚石',
+    a: 3.57, bond: Math.sqrt(3) / 4,
+    atoms: [...corners('C'), ...faceCenters('C'),
+      [.25,.25,.25,'C'], [.75,.75,.25,'C'],
+      [.75,.25,.75,'C'], [.25,.75,.75,'C']],
+  },
+  fcc: {
+    label: 'Cu · 面心立方 (FCC)',
+    a: 3.61, bond: Math.SQRT2 / 2,
+    atoms: [...corners('Cu'), ...faceCenters('Cu')],
+  },
+  bcc: {
+    label: 'Fe · 体心立方 (BCC)',
+    a: 2.87, bond: Math.sqrt(3) / 2,
+    atoms: [...corners('Fe'), [.5,.5,.5,'Fe']],
+  },
+  sc: {
+    label: 'Po · 简单立方 (SC)',
+    a: 3.35, bond: 1.00,
+    atoms: corners('Po'),
+  },
+};
+
+/* ==================== 场景基础 ==================== */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+/* ==================== 环境贴图 ==================== */
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+const envRT = pmrem.fromScene(new RoomEnvironment(), 0.02);
+scene.environment = envRT.texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.rotateSpeed = 0.9;
+controls.autoRotateSpeed = 2.0;
+
+/* ==================== 光照 ==================== */
+scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+keyLight.position.set(8, 14, 10);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xd8e6ff, 0.5);
+fillLight.position.set(-10, -4, -8);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xfff2d8, 0.35);
+rimLight.position.set(-5, 10, -12);
+scene.add(rimLight);
+
+/* ==================== 状态 ==================== */
+const root = new THREE.Group();
+scene.add(root);
+
+const state = {
+  crystal: 'nacl',
+  showBonds: true,
+  showCell: true,
+  autoRotate: false,
+  mode: 'normal',
+  blinkMeshes: [],
+  animating: [],
+  selected: null,
+  extensions: new Set(['0,0,0']),
+  arrows: [],
+};
+
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+/* ==================== 材质工厂 ==================== */
+function atomMaterial(color, isOrigin) {
+  if (isOrigin) {
+    return new THREE.MeshStandardMaterial({
+      color, roughness: 0.82, metalness: 0.02, envMapIntensity: 0.4,
+    });
+  }
+  return new THREE.MeshStandardMaterial({
+    color, roughness: 0.85, metalness: 0.02, envMapIntensity: 0.35,
+    transparent: true, opacity: EXT_ATOM_OPACITY, depthWrite: false,
+  });
+}
+
+/* ==================== 工具函数 ==================== */
+function createBond(p1, p2, radius, opacity = 1) {
+  const dir = new THREE.Vector3().subVectors(p2, p1);
+  const len = dir.length();
+  const geo = new THREE.CylinderGeometry(radius, radius, len, 14, 1);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x475569, roughness: 0.75, metalness: 0.05, envMapIntensity: 0.4,
+    transparent: opacity < 1, opacity,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(p1).addScaledVector(dir, 0.5);
+  mesh.quaternion.setFromUnitVectors(Y_AXIS, dir.normalize());
+  return mesh;
+}
+
+function disposeTree(obj) {
+  obj.traverse(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(m => m.dispose());
+    }
+  });
+}
+
+function resetView() {
+  const a = CRYSTALS[state.crystal].a;
+  const n = Math.max(1, Math.cbrt(state.extensions.size));
+  const dist = a * 2.4 * (1 + 0.35 * (n - 1));
+  camera.position.set(dist * 0.8, dist * 0.65, dist * 0.8);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+/* ==================== 箭头 ==================== */
+const ARROW_COLOR = 0x3b82f6;
+
+function createArrowMesh(atomPos, dir, a) {
+  const [di, dj, dk] = dir;
+  const dirVec = new THREE.Vector3(di, dj, dk).normalize();
+
+  const startPos = atomPos.clone().addScaledVector(dirVec, a * 0.16);
+  const shaftLen = a * 0.26;
+  const headLen = a * 0.18;
+  const shaftRadius = Math.max(a * 0.018, 0.026);
+  const headRadius = Math.max(a * 0.052, 0.082);
+
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: ARROW_COLOR, emissive: ARROW_COLOR, emissiveIntensity: 0.6,
+    roughness: 0.5, metalness: 0.05,
+  });
+
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLen, 14), mat
+  );
+  shaft.position.y = shaftLen / 2;
+  group.add(shaft);
+
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(headRadius, headLen, 18), mat
+  );
+  head.position.y = shaftLen + headLen / 2;
+  group.add(head);
+
+  group.position.copy(startPos);
+  group.quaternion.setFromUnitVectors(Y_AXIS, dirVec);
+
+  const ud = { isArrow: true, direction: dir };
+  group.userData = ud;
+  shaft.userData = ud;
+  head.userData = ud;
+
+  return group;
+}
+
+/* ==================== 判断可扩展方向 ==================== */
+function getValidDirections(atomPos, sourceCell) {
+  const data = CRYSTALS[state.crystal];
+  const a = data.a;
+  const half = a / 2;
+  const threshold = data.bond * a * 1.08;
+
+  const axes = [
+    [1,0,0], [-1,0,0],
+    [0,1,0], [0,-1,0],
+    [0,0,1], [0,0,-1],
+  ];
+
+  const valid = [];
+  for (const dir of axes) {
+    const nCell = [
+      sourceCell[0] + dir[0],
+      sourceCell[1] + dir[1],
+      sourceCell[2] + dir[2],
+    ];
+    const nKey = nCell.join(',');
+    if (state.extensions.has(nKey)) continue;
+
+    let hasBond = false;
+    for (const [fx, fy, fz] of data.atoms) {
+      const pos = new THREE.Vector3(
+        fx * a - half + nCell[0] * a,
+        fy * a - half + nCell[1] * a,
+        fz * a - half + nCell[2] * a
+      );
+      const d = pos.distanceTo(atomPos);
+      if (d > 0.01 && d < threshold) { hasBond = true; break; }
+    }
+    if (hasBond) valid.push(dir);
+  }
+  return valid;
+}
+
+/* ==================== 创建原子 ==================== */
+function createAtomMesh(el, pos, isOrigin, selected) {
+  const info = ELEMENTS[el];
+  const r = info.radius * ATOM_SCALE;
+  const group = new THREE.Group();
+  group.position.copy(pos);
+
+  const geo = new THREE.SphereGeometry(r, 40, 28);
+  const mat = atomMaterial(info.color, isOrigin);
+  const sphere = new THREE.Mesh(geo, mat);
+
+  if (selected) {
+    mat.emissive = new THREE.Color(0xffffff);
+    mat.emissiveIntensity = 0.4;
+    sphere.scale.setScalar(1.18);
+  }
+
+  group.add(sphere);
+  return group;
+}
+
+/* ==================== 场景重建 ==================== */
+function buildScene() {
+  state.blinkMeshes = [];
+  state.animating = [];
+  state.arrows = [];
+
+  disposeTree(root);
+  root.clear();
+
+  const data = CRYSTALS[state.crystal];
+  const a = data.a;
+  const half = a / 2;
+  const threshold = data.bond * a * 1.08;
+
+  const cellList = Array.from(state.extensions).sort((x, y) => {
+    const [xi, xj, xk] = x.split(',').map(Number);
+    const [yi, yj, yk] = y.split(',').map(Number);
+    const xp = (xi === 0 && xj === 0 && xk === 0) ? 0 : 1;
+    const yp = (yi === 0 && yj === 0 && yk === 0) ? 0 : 1;
+    return xp - yp;
+  });
+
+  const atomMap = new Map();
+  for (const cellKey of cellList) {
+    const [i, j, k] = cellKey.split(',').map(Number);
+    const isOrigin = (i === 0 && j === 0 && k === 0);
+    for (const [fx, fy, fz, el] of data.atoms) {
+      const pos = new THREE.Vector3(
+        fx * a - half + i * a,
+        fy * a - half + j * a,
+        fz * a - half + k * a
+      );
+      const key = `${pos.x.toFixed(3)},${pos.y.toFixed(3)},${pos.z.toFixed(3)}`;
+      if (!atomMap.has(key)) {
+        atomMap.set(key, { el, frac: [fx, fy, fz], pos, isOrigin, sourceCell: [i, j, k] });
+      } else if (isOrigin) {
+        atomMap.get(key).isOrigin = true;
+      }
+    }
+  }
+  const allAtoms = Array.from(atomMap.values());
+
+  for (const atom of allAtoms) {
+    const isSelected = state.selected &&
+      atom.pos.distanceTo(state.selected.pos) < 0.01;
+    const group = createAtomMesh(atom.el, atom.pos, atom.isOrigin, isSelected);
+    const sphere = group.children[0];
+    sphere.userData = {
+      isAtom: true,
+      element: atom.el,
+      frac: atom.frac,
+      sourceCell: atom.sourceCell,
+      isOrigin: atom.isOrigin,
+    };
+    root.add(group);
+  }
+
+  if (state.showBonds) {
+    const bondGroup = new THREE.Group();
+    bondGroup.name = 'bonds';
+    const bondRadius = Math.max(a * 0.016, 0.032);
+    for (let i = 0; i < allAtoms.length; i++) {
+      for (let j = i + 1; j < allAtoms.length; j++) {
+        const d = allAtoms[i].pos.distanceTo(allAtoms[j].pos);
+        if (d > 0.01 && d < threshold) {
+          const crossCell = !allAtoms[i].isOrigin || !allAtoms[j].isOrigin;
+          bondGroup.add(createBond(
+            allAtoms[i].pos, allAtoms[j].pos, bondRadius,
+            crossCell ? 0.6 : 1
+          ));
+        }
+      }
+    }
+    root.add(bondGroup);
+  }
+
+  if (state.showCell) {
+    const cellGroup = new THREE.Group();
+    cellGroup.name = 'cellBox';
+    for (const cellKey of state.extensions) {
+      const [i, j, k] = cellKey.split(',').map(Number);
+      const isMain = (i === 0 && j === 0 && k === 0);
+      const boxGeo = new THREE.BoxGeometry(a, a, a);
+      const edges = new THREE.EdgesGeometry(boxGeo);
+      const seg = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({
+          color: isMain ? 0x2563eb : 0x94a3b8,
+          transparent: true,
+          opacity: isMain ? 0.65 : 0.45,
+        })
+      );
+      seg.position.set(i * a, j * a, k * a);
+      boxGeo.dispose();
+      cellGroup.add(seg);
+    }
+    root.add(cellGroup);
+  }
+
+  if (state.selected && state.mode === 'normal') {
+    const dirs = getValidDirections(state.selected.pos, state.selected.sourceCell);
+    for (const dir of dirs) {
+      const arrow = createArrowMesh(state.selected.pos, dir, a);
+      root.add(arrow);
+      state.arrows.push(arrow);
+    }
+  }
+
+  updatePanel();
+}
+
+/* ==================== 面板信息 ==================== */
+const infoEl = document.getElementById('info');
+
+/* ★ 判断当前选中的原子是否来自扩展晶胞（可被清除） */
+function isSelectedInExtension() {
+  if (!state.selected) return false;
+  return state.selected.sourceCell.join(',') !== '0,0,0';
+}
+
+function updatePanel() {
+  if (!state.selected || state.mode !== 'normal') {
+    infoEl.innerHTML = '点击任意原子查看信息';
+    return;
+  }
+
+  const el = ELEMENTS[state.selected.el];
+  const [x, y, z] = state.selected.frac;
+  const extCount = state.extensions.size - 1;
+  const dirs = getValidDirections(state.selected.pos, state.selected.sourceCell);
+  const inExt = isSelectedInExtension();
+
+  let html =
+    `<b>${el.label}</b><br>` +
+    `分数坐标 (${x}, ${y}, ${z})<br>` +
+    `真实半径 ${el.radius} Å<br>`;
+
+  if (inExt) {
+    html += `<span class="tag tag-ext">来自晶胞 (${state.selected.sourceCell.join(', ')})</span><br>`;
+  }
+  if (extCount > 0) {
+    html += `<span class="tag">已扩展 ${extCount} 个晶胞</span><br>`;
+  }
+  if (dirs.length > 0) {
+    html += `<span style="color:#2563eb">点击箭头扩展相邻晶胞</span><br>`;
+  } else if (state.extensions.size > 1) {
+    html += `<span style="color:#94a3b8">该方向已无更多可扩展</span><br>`;
+  }
+
+  html += `<button class="primary" id="coordBtn">查看配位数</button>`;
+
+  // ★ 只有扩展晶胞里的原子才显示"清除该晶胞"
+  if (inExt) {
+    html += `<button class="danger" id="clearCellBtn">清除该晶胞</button>`;
+  }
+
+  infoEl.innerHTML = html;
+
+  document.getElementById('coordBtn').addEventListener('click', () => {
+    root.traverse(obj => {
+      if (obj.userData && obj.userData.isAtom &&
+          obj.getWorldPosition(new THREE.Vector3()).distanceTo(state.selected.pos) < 0.01) {
+        enterCoordinationMode(obj);
+      }
+    });
+  });
+
+  if (inExt) {
+    document.getElementById('clearCellBtn').addEventListener('click', clearSelectedCell);
+  }
+}
+
+/* ★ 清除选中原子所在的晶胞 */
+function clearSelectedCell() {
+  if (!state.selected) return;
+
+  const key = state.selected.sourceCell.join(',');
+  if (key === '0,0,0') return;            // 原点晶胞不可清除
+  if (!state.extensions.has(key)) return;
+
+  state.extensions.delete(key);
+  state.selected = null;
+  buildScene();
+}
+
+/* ==================== 配位数分析 ==================== */
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+
+function enterCoordinationMode(centerMesh) {
+  state.blinkMeshes = [];
+  state.animating = [];
+  state.arrows = [];
+
+  const data = CRYSTALS[state.crystal];
+  const a = data.a;
+  const half = a / 2;
+  const centerPos = centerMesh.getWorldPosition(new THREE.Vector3()).clone();
+  const centerEl = centerMesh.userData.element;
+  const centerFrac = [...centerMesh.userData.frac];
+  const centerCell = centerMesh.userData.sourceCell
+    ? [...centerMesh.userData.sourceCell]
+    : [0, 0, 0];
+
+  const rawAtoms = [];
+  for (let di = -1; di <= 1; di++) {
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let dk = -1; dk <= 1; dk++) {
+        const ci = centerCell[0] + di;
+        const cj = centerCell[1] + dj;
+        const ck = centerCell[2] + dk;
+        for (const [fx, fy, fz, el] of data.atoms) {
+          rawAtoms.push({
+            el,
+            pos: new THREE.Vector3(
+              fx * a - half + ci * a,
+              fy * a - half + cj * a,
+              fz * a - half + ck * a
+            ),
+            frac: [fx, fy, fz],
+          });
+        }
+      }
+    }
+  }
+
+  const maxDist = a * 1.3;
+  const seen = new Set();
+  const atoms = [];
+  for (const at of rawAtoms) {
+    const key = `${at.pos.x.toFixed(3)},${at.pos.y.toFixed(3)},${at.pos.z.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    const d = at.pos.distanceTo(centerPos);
+    if (d > maxDist) continue;
+    seen.add(key);
+    atoms.push({ ...at, d });
+  }
+
+  const nearestDist = data.bond * a;
+  const tol = nearestDist * 0.1;
+  const neighborAtoms = atoms.filter(at =>
+    at.d > 0.01 && Math.abs(at.d - nearestDist) < tol
+  );
+  const coordNum = neighborAtoms.length;
+
+  const neighborKeys = new Set(neighborAtoms.map(at =>
+    `${at.pos.x.toFixed(3)},${at.pos.y.toFixed(3)},${at.pos.z.toFixed(3)}`
+  ));
+
+  disposeTree(root);
+  root.clear();
+
+  const now = performance.now();
+
+  for (const at of atoms) {
+    const info = ELEMENTS[at.el];
+    const key = `${at.pos.x.toFixed(3)},${at.pos.y.toFixed(3)},${at.pos.z.toFixed(3)}`;
+    const isCenter = at.d < 0.01;
+    const isNeighbor = neighborKeys.has(key);
+
+    const r = info.radius * ATOM_SCALE;
+    const geo = new THREE.SphereGeometry(r, 40, 28);
+
+    let mat;
+    if (isCenter) {
+      mat = new THREE.MeshStandardMaterial({
+        color: info.color, roughness: 0.72, metalness: 0.03,
+        emissive: 0xffffff, emissiveIntensity: 0.5,
+        envMapIntensity: 0.45,
+      });
+    } else if (isNeighbor) {
+      mat = new THREE.MeshStandardMaterial({
+        color: info.color, roughness: 0.78, metalness: 0.03,
+        emissive: 0xffffff, emissiveIntensity: 0.35,
+        envMapIntensity: 0.45,
+      });
+    } else {
+      mat = new THREE.MeshStandardMaterial({
+        color: info.color, roughness: 0.85, metalness: 0.02,
+        envMapIntensity: 0.3,
+        transparent: true, opacity: 0, depthWrite: false,
+      });
+    }
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(at.pos);
+    mesh.userData = { isAtom: true, element: at.el, frac: at.frac };
+
+    const delay = isCenter ? 0 : at.d * 90;
+    const targetScale = isCenter ? 1.18 : 1;
+    mesh.scale.setScalar(0);
+    mesh.userData.animStart = now + delay;
+    mesh.userData.animDur = 520;
+    mesh.userData.fromScale = 0;
+    mesh.userData.targetScale = targetScale;
+
+    if (!isCenter && !isNeighbor) {
+      mesh.userData.fromOpacity = 0;
+      mesh.userData.targetOpacity = 0.42;
+    }
+
+    root.add(mesh);
+    state.animating.push(mesh);
+
+    if (isCenter) mesh.userData.isCenter = true;
+    if (isNeighbor) state.blinkMeshes.push(mesh);
+  }
+
+  if (state.showBonds) {
+    const bondGroup = new THREE.Group();
+    bondGroup.name = 'bonds';
+    const bondRadius = Math.max(a * 0.016, 0.032);
+    for (const nAt of neighborAtoms) {
+      const bond = createBond(centerPos, nAt.pos, bondRadius, 0);
+      bond.userData = {
+        animStart: now + 260, animDur: 420,
+        fromOpacity: 0, targetOpacity: 1,
+        isBond: true,
+      };
+      bondGroup.add(bond);
+      state.animating.push(bond);
+    }
+    root.add(bondGroup);
+  }
+
+  if (state.showCell) {
+    const cellGroup = new THREE.Group();
+    cellGroup.name = 'cellBox';
+
+    const offsets = new Set([centerCell.join(',')]);
+    for (const nAt of neighborAtoms) {
+      const ci = Math.floor((nAt.pos.x + half) / a + 0.001);
+      const cj = Math.floor((nAt.pos.y + half) / a + 0.001);
+      const ck = Math.floor((nAt.pos.z + half) / a + 0.001);
+      offsets.add(`${ci},${cj},${ck}`);
+    }
+
+    for (const key of offsets) {
+      const [i, j, k] = key.split(',').map(Number);
+      const isCenterCell =
+        (i === centerCell[0] && j === centerCell[1] && k === centerCell[2]);
+      const boxGeo = new THREE.BoxGeometry(a, a, a);
+      const edges = new THREE.EdgesGeometry(boxGeo);
+      const seg = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({
+          color: isCenterCell ? 0x2563eb : 0x94a3b8,
+          transparent: true,
+          opacity: isCenterCell ? 0.65 : 0.42,
+        })
+      );
+      seg.position.set(i * a, j * a, k * a);
+      boxGeo.dispose();
+      cellGroup.add(seg);
+    }
+    root.add(cellGroup);
+  }
+
+  const offset = camera.position.clone().sub(controls.target);
+  controls.target.copy(centerPos);
+  camera.position.copy(centerPos).add(offset);
+  controls.update();
+
+  const cellInfo = centerCell.join(',');
+  infoEl.innerHTML =
+    `<b>${ELEMENTS[centerEl].label}</b> · 配位分析<br>` +
+    `配位数：<span class="coord-num">${coordNum}</span><br>` +
+    `配位距离：${nearestDist.toFixed(2)} Å<br>` +
+    `分数坐标：(${centerFrac.join(', ')})<br>` +
+    (cellInfo !== '0,0,0'
+      ? `<span class="tag tag-ext">来自晶胞 (${cellInfo})</span><br>`
+      : '') +
+    `<button id="backBtn">返回晶体视图</button>`;
+
+  document.getElementById('backBtn').addEventListener('click', exitCoordinationMode);
+  state.mode = 'coordination';
+}
+
+function exitCoordinationMode() {
+  state.mode = 'normal';
+  state.blinkMeshes = [];
+  state.animating = [];
+  buildScene();
+}
+
+/* ==================== 点击拾取 ==================== */
+let downX = 0, downY = 0, downTime = 0;
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  downX = e.clientX; downY = e.clientY; downTime = performance.now();
+});
+
+renderer.domElement.addEventListener('pointerup', e => {
+  const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+  if (moved > 6 || performance.now() - downTime > 700) return;
+  if (state.mode === 'coordination') return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointerNDC, camera);
+  const hits = raycaster.intersectObjects(root.children, true);
+
+  for (const hit of hits) {
+    const obj = hit.object;
+
+    if (obj.userData && obj.userData.isArrow) {
+      const dir = obj.userData.direction;
+      const srcCell = state.selected.sourceCell;
+      const nKey = [srcCell[0] + dir[0], srcCell[1] + dir[1], srcCell[2] + dir[2]].join(',');
+      if (!state.extensions.has(nKey)) {
+        state.extensions.add(nKey);
+        buildScene();
+      }
+      return;
+    }
+
+    if (obj.userData && obj.userData.isAtom) {
+      state.selected = {
+        el: obj.userData.element,
+        frac: [...obj.userData.frac],
+        pos: obj.getWorldPosition(new THREE.Vector3()),
+        sourceCell: [...obj.userData.sourceCell],
+      };
+      buildScene();
+      return;
+    }
+  }
+
+  state.selected = null;
+  buildScene();
+});
+
+/* ==================== UI 绑定 ==================== */
+const selectEl = document.getElementById('crystal');
+for (const [key, val] of Object.entries(CRYSTALS)) {
+  const opt = document.createElement('option');
+  opt.value = key;
+  opt.textContent = val.label;
+  selectEl.appendChild(opt);
+}
+selectEl.value = state.crystal;
+
+selectEl.addEventListener('change', () => {
+  state.crystal = selectEl.value;
+  state.extensions = new Set(['0,0,0']);
+  state.selected = null;
+  state.mode = 'normal';
+  buildScene();
+  resetView();
+});
+
+const scaleSlider = document.getElementById('atomScale');
+const scaleVal = document.getElementById('atomScaleVal');
+scaleSlider.value = ATOM_SCALE.toFixed(2);
+scaleVal.textContent = ATOM_SCALE.toFixed(2);
+
+scaleSlider.addEventListener('input', () => {
+  ATOM_SCALE = parseFloat(scaleSlider.value);
+  scaleVal.textContent = ATOM_SCALE.toFixed(2);
+  if (state.mode === 'coordination') exitCoordinationMode();
+  else buildScene();
+});
+
+document.getElementById('showBonds').addEventListener('change', e => {
+  state.showBonds = e.target.checked;
+  if (state.mode === 'coordination') exitCoordinationMode();
+  else buildScene();
+});
+
+document.getElementById('showCell').addEventListener('change', e => {
+  state.showCell = e.target.checked;
+  if (state.mode === 'coordination') {
+    exitCoordinationMode();
+  } else {
+    const g = root.getObjectByName('cellBox');
+    if (g) g.visible = state.showCell;
+  }
+});
+
+document.getElementById('autoRotate').addEventListener('change', e => {
+  state.autoRotate = e.target.checked;
+  controls.autoRotate = state.autoRotate;
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  if (state.mode === 'coordination') exitCoordinationMode();
+  resetView();
+});
+
+document.getElementById('clearExt').addEventListener('click', () => {
+  state.extensions = new Set(['0,0,0']);
+  state.selected = null;
+  if (state.mode === 'coordination') exitCoordinationMode();
+  else buildScene();
+  resetView();
+});
+
+/* ==================== 启动 ==================== */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+
+  if (state.animating.length > 0) {
+    const remaining = [];
+    for (const obj of state.animating) {
+      const ud = obj.userData;
+      const elapsed = now - ud.animStart;
+      if (elapsed < 0) { remaining.push(obj); continue; }
+
+      const t = Math.min(elapsed / ud.animDur, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+
+      if (ud.targetScale !== undefined) {
+        const s = ud.fromScale + (ud.targetScale - ud.fromScale) * eased;
+        obj.scale.setScalar(s);
+      }
+      if (ud.targetOpacity !== undefined && obj.material) {
+        const o = ud.fromOpacity + (ud.targetOpacity - ud.fromOpacity) * eased;
+        obj.material.opacity = o;
+        if (ud.isBond) obj.material.transparent = o < 0.99;
+      }
+      if (t < 1) remaining.push(obj);
+    }
+    state.animating = remaining;
+  }
+
+  if (state.blinkMeshes.length > 0) {
+    const t = now * 0.004;
+    const intensity = 0.18 + 0.6 * (0.5 + 0.5 * Math.sin(t));
+    for (const m of state.blinkMeshes) {
+      if (m.material) {
+        m.material.emissive.setHex(0xffffff);
+        m.material.emissiveIntensity = intensity;
+      }
+    }
+  }
+
+  if (state.arrows.length > 0) {
+    const t = now * 0.004;
+    const s = 1 + 0.07 * Math.sin(t);
+    for (const arrow of state.arrows) {
+      arrow.scale.setScalar(s);
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+buildScene();
+resetView();
+animate();
+</script>
+</body>
+</html>
